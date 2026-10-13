@@ -11,8 +11,7 @@
     "@vitejs/plugin-react": "latest",
     "vite": "latest",
     "react": "latest",
-    "react-dom": "latest",
-    "lucide-react": "^0.468.0"
+    "react-dom": "latest"
   },
   "devDependencies": {}
 }
