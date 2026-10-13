@@ -9,3 +9,5 @@ coverage/
 .pytest_cache/
 .DS_Store
 backend/staticfiles/
+backend/db.sqlite3
+frontend/.env.local

@@ -1,9 +1,10 @@
 import csv
+from io import StringIO
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.db.models import F
 
 from .models import BankTransaction, LineItem, Match
@@ -100,9 +101,9 @@ def suggest_matches(bank_transaction):
 
 
 def parse_csv_amount(raw):
+    if not re.fullmatch(r"[+-]?(?:(?:\d{1,3}(?:,\d{3})+)|\d+)(?:\.\d{1,2})?", raw):
+        raise ValueError("amount must be a valid number with at most two decimal places")
     value = raw.replace(",", "")
-    if not re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)", value):
-        raise ValueError("amount must be a valid number")
     try:
         amount = Decimal(value)
     except InvalidOperation as exc:
@@ -111,14 +112,14 @@ def parse_csv_amount(raw):
         raise ValueError("amount must be a finite number")
     if amount == 0:
         raise ValueError("amount cannot be zero")
-    if amount.as_tuple().exponent < -2:
-        raise ValueError("amount can have at most two decimal places")
+    if len(value.replace("+", "").replace("-", "").replace(".", "")) > 14:
+        raise ValueError("amount exceeds the supported 14 digit limit")
     return amount
 
 
 def import_statement(file_obj, organization):
     text = file_obj.read().decode("utf-8-sig")
-    reader = csv.DictReader(text.splitlines())
+    reader = csv.DictReader(StringIO(text, newline=""))
     required = {"date", "description", "amount", "type", "reference"}
     reader.fieldnames = [(column or "").strip() for column in (reader.fieldnames or [])]
     columns = set(reader.fieldnames)
@@ -185,7 +186,11 @@ def approve_match(match_id, organization):
         BankTransaction.Status.SUGGESTED, BankTransaction.Status.REVIEW
     }:
         return None, "conflict"
-    line_item = LineItem.objects.select_for_update().get(pk=match.line_item_id)
+    line_item = LineItem.objects.select_for_update().filter(
+        pk=match.line_item_id, capital_call__organization=organization
+    ).first()
+    if line_item is None:
+        return None, "not_found"
     if match.transaction.amount > line_item.remaining:
         return None, "amount_conflict"
     line_item.amount_funded += match.transaction.amount
