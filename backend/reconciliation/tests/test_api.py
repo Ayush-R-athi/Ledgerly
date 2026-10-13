@@ -199,6 +199,17 @@ class ReconciliationAPITests(TestCase):
         self.assertEqual(missing.status_code, 400)
         self.assertEqual(unknown.status_code, 404)
 
+    def test_cors_preflight_allows_organization_header(self):
+        response = self.client.options(
+            "/api/transactions/",
+            HTTP_ORIGIN="http://127.0.0.1:5173",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="GET",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS="x-organization",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Access-Control-Allow-Origin"], "http://127.0.0.1:5173")
+        self.assertIn("x-organization", response["Access-Control-Allow-Headers"])
+
     def test_seed_demo_is_idempotent(self):
         before = (Organization.objects.count(), LineItem.objects.count())
         call_command("seed_demo", verbosity=0)
